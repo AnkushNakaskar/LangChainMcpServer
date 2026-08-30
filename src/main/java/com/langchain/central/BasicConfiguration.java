@@ -2,7 +2,6 @@ package com.langchain.central;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.langchain.central.config.LLMConfig;
 import com.langchain.central.config.McpConfig;
 import in.vectorpro.dropwizard.swagger.SwaggerBundleConfiguration;
 import io.dropwizard.Configuration;
@@ -23,9 +22,6 @@ public class BasicConfiguration extends Configuration {
     @NotNull
     private SwaggerBundleConfiguration swagger;
 
-    @Valid
-    @NotNull
-    private LLMConfig llm;
 
     @Valid
     @NotNull

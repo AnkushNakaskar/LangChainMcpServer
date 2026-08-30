@@ -5,7 +5,6 @@ import com.google.inject.Provides;
 import com.google.inject.Singleton;
 import com.google.inject.multibindings.Multibinder;
 import com.langchain.central.BasicConfiguration;
-import com.langchain.central.config.LLMConfig;
 import com.langchain.central.config.McpConfig;
 import com.langchain.central.dao.InMemoryMovieDao;
 import com.langchain.central.dao.MovieDao;
@@ -24,8 +23,6 @@ public class CoreModule extends AbstractModule {
     protected void configure() {
         bind(MovieDao.class).to(InMemoryMovieDao.class);
 
-        // the sets are injected into LangChainService and offered to the model as callable tools,
-        // so a new tool class only has to be added here
         Multibinder.newSetBinder(binder(), MovieToolService.class)
                 .addBinding().to(MovieToolService.class);
 
@@ -33,12 +30,6 @@ public class CoreModule extends AbstractModule {
                 .addBinding().to(MovieToolService.class);
     }
 
-    /** Exposes the {@code llm} block of application.yml to the service layer. */
-    @Provides
-    @Singleton
-    public LLMConfig llmConfig(final BasicConfiguration configuration) {
-        return configuration.getLlm();
-    }
 
     @Provides
     @Singleton
