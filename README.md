@@ -286,20 +286,20 @@ Example response:
 ```json
 {
   "model": "hf.co/unsloth/Llama-3.2-1B-Instruct-GGUF:UD-Q4_K_XL",
-  "createdAt": "2026-08-30T11:45:31.029086Z",
-  "response": "The director of Inception is Christopher Nolan.",
+  "createdAt": "2026-08-30T11:54:59.237264Z",
+  "response": "Christopher Nolan",
   "sessionId": "movie-demo",
   "done": true,
   "doneReason": "stop",
-  "totalDuration": 2917142750,
-  "promptEvalCount": 817,
-  "evalCount": 50,
-  "totalTokenCount": 867,
+  "totalDuration": 573092458,
+  "promptEvalCount": 1081,
+  "evalCount": 29,
+  "totalTokenCount": 1110,
   "tools": [
     {
       "name": "get_movie_director",
-      "arguments": "{\"type\":\"object\",\"required\":\"[\\\"movieTitle\\\"]\",\"properties\":{\"movieTitle\":\"Inception\"}}",
-      "result": "Tool (get_movie_director) input validation failed: Validation failed: JSON schema validation errors: [: required property 'movieTitle' not found]"
+      "arguments": "{\"properties\":\"{'movieTitle': 'Inception'}\"}",
+      "result": "Christopher Nolan"
     }
   ]
 }
