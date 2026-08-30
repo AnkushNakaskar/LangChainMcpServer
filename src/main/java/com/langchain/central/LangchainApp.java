@@ -32,7 +32,6 @@ public class LangchainApp extends Application<BasicConfiguration> {
     @Override
     public void run(final BasicConfiguration basicConfiguration,
                     final Environment environment) {
-
         final var injector = InjectorLookup.getInjector(this)
                 .orElseThrow(() -> new IllegalStateException("Guice injector is not available"));
         environment.jersey().register(injector.getInstance(LangChainResource.class));
