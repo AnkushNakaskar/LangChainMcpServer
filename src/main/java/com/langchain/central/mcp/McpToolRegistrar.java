@@ -3,7 +3,7 @@ package com.langchain.central.mcp;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.langchain.central.service.tool.ToolService;
-import com.langchain.central.util.McpToolSchemaUtil;
+import com.langchain.central.util.McpToolUtil;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures.SyncToolSpecification;
@@ -56,7 +56,7 @@ public class McpToolRegistrar {
                                        ? method.getName()
                                        : String.join(" ", descriptions);
             final McpSchema.Tool tool = McpSchema.Tool.builder(
-                            McpToolSchemaUtil.toToolName(method.getName()))
+                            McpToolUtil.toToolName(method.getName()))
                     .description(description)
                     .inputSchema(inputSchema(method))
                     .build();
@@ -75,7 +75,7 @@ public class McpToolRegistrar {
         for (Parameter parameter : method.getParameters()) {
             final P annotation = parameter.getAnnotation(P.class);
             properties.put(parameter.getName(), Map.of(
-                    "type", McpToolSchemaUtil.toJsonSchemaType(parameter.getType()),
+                    "type", McpToolUtil.toJsonSchemaType(parameter.getType()),
                     "description", annotation == null
                             ? parameter.getName()
                             : annotation.value()));

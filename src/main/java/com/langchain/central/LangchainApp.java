@@ -5,6 +5,7 @@ import com.langchain.central.mcp.McpManagedService;
 import com.langchain.central.module.CoreModule;
 import com.langchain.central.module.ServiceModule;
 import com.langchain.central.resource.McpResource;
+import com.langchain.central.util.McpToolUtil;
 import in.vectorpro.dropwizard.swagger.SwaggerBundle;
 import in.vectorpro.dropwizard.swagger.SwaggerBundleConfiguration;
 import io.dropwizard.Application;
@@ -31,6 +32,7 @@ public class LangchainApp extends Application<BasicConfiguration> {
     @Override
     public void run(final BasicConfiguration basicConfiguration,
                     final Environment environment) {
+        McpToolUtil.init(environment.getObjectMapper());
         final var injector = InjectorLookup.getInjector(this)
                 .orElseThrow(() -> new IllegalStateException("Guice injector is not available"));
         environment.jersey().register(injector.getInstance(McpResource.class));
