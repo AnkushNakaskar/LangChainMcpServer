@@ -77,30 +77,30 @@ McpToolRegistrar
 Set<ToolService> supplied by Guice
    |
    v
-MovieToolService -> MovieDao
+GitToolService -> local Git repository
 ```
 
 `McpManagedService` starts and stops the MCP SDK with the Dropwizard lifecycle.
 
 `McpToolRegistrar` reads public methods annotated with `@Tool`, generates their JSON schemas, and
 registers handlers that invoke the corresponding Java methods. Maven compilation retains parameter
-names with `-parameters`, allowing MCP arguments such as `movieTitle` to map to Java parameters.
+names with `-parameters`, allowing MCP arguments such as `baseRevision` to map to Java parameters.
 
-## Available movie tools
+## Available Git tools
 
-| MCP tool | Java method | Argument | Description |
+| MCP tool | Java method | Arguments | Description |
 |---|---|---|---|
-| `get_movie_genre` | `getMovieGenre` | `movieTitle` | Returns the movie genre |
-| `get_movie_director` | `getMovieDirector` | `movieTitle` | Returns the movie director |
-| `get_movie_release_year` | `getMovieReleaseYear` | `movieTitle` | Returns the release year |
-| `list_all_movies` | `listAllMovies` | None | Lists the available movie titles |
+| `get_git_status` | `getGitStatus` | None | Shows the branch and working tree status |
+| `get_working_tree_diff` | `getWorkingTreeDiff` | None | Returns unstaged changes |
+| `get_staged_diff` | `getStagedDiff` | None | Returns staged changes |
+| `get_diff_between_revisions` | `getDiffBetweenRevisions` | `baseRevision`, `headRevision` | Returns a review patch |
+| `list_changed_files` | `listChangedFiles` | `baseRevision`, `headRevision` | Lists changed files and statuses |
+| `get_recent_commits` | `getRecentCommits` | `maxCount` | Shows up to 100 recent commits |
+| `show_commit` | `showCommit` | `revision` | Shows commit metadata, statistics, and patch |
 
-The included catalogue contains:
-
-- Forrest Gump
-- Inception
-- Pulp Fiction
-- The Matrix
+All tools are read-only and invoke fixed Git commands rather than arbitrary shell input. By default,
+commands run in the server process working directory. Set `GIT_REPOSITORY_PATH` or the
+`git.repository.path` JVM system property to review another local repository.
 
 ## Configuration
 
@@ -140,7 +140,7 @@ mvn clean package
 java -jar target/langchain_mcp_server.jar
 ```
 
-The MCP server does not need Ollama to execute movie tools directly. Ollama is only needed for the
+The MCP server does not need Ollama to execute Git tools directly. Ollama is only needed for the
 optional `/langchain` chat APIs that use an LLM.
 
 ## Verify the MCP server
@@ -184,7 +184,7 @@ The response contains each tool's name, description and generated input schema.
 
 ### Call a tool
 
-Get the genre of Inception:
+Get the working tree status:
 
 ```bash
 curl -X POST http://localhost:8088/mcp \
@@ -194,10 +194,8 @@ curl -X POST http://localhost:8088/mcp \
     "id": 3,
     "method": "tools/call",
     "params": {
-      "name": "get_movie_genre",
-      "arguments": {
-        "movieTitle": "Inception"
-      }
+      "name": "get_git_status",
+      "arguments": {}
     }
   }'
 ```
@@ -212,7 +210,7 @@ Expected tool result:
     "content": [
       {
         "type": "text",
-        "text": "Science Fiction"
+        "text": "## main...origin/main"
       }
     ],
     "isError": false
@@ -220,7 +218,7 @@ Expected tool result:
 }
 ```
 
-List all movies:
+Compare a feature branch with `main`:
 
 ```bash
 curl -X POST http://localhost:8088/mcp \
@@ -230,8 +228,11 @@ curl -X POST http://localhost:8088/mcp \
     "id": 4,
     "method": "tools/call",
     "params": {
-      "name": "list_all_movies",
-      "arguments": {}
+      "name": "get_diff_between_revisions",
+      "arguments": {
+        "baseRevision": "main",
+        "headRevision": "feature/code-review"
+      }
     }
   }'
 ```
@@ -268,56 +269,26 @@ mvn clean package
 java -jar target/langchain_mcp_client.jar
 ```
 
-Ask the LLM to use a movie tool:
+Ask the LLM to use the Git tools:
 
 ```bash
 curl -X POST http://localhost:8090/langchain/chat \
   -H 'Content-Type: application/json' \
   -d '{
-    "prompt": "What is the director of Inception?",
-    "assistant": "MOVIE",
-    "sessionId": "movie-demo",
+    "prompt": "Review the changes on feature/code-review compared with main.",
+    "assistant": "CODE_REVIEW",
+    "sessionId": "code-review-demo",
     "useTools": true
   }'
 ```
-
-Example response:
-
-```json
-{
-  "model": "hf.co/unsloth/Llama-3.2-1B-Instruct-GGUF:UD-Q4_K_XL",
-  "createdAt": "2026-08-30T11:54:59.237264Z",
-  "response": "Christopher Nolan",
-  "sessionId": "movie-demo",
-  "done": true,
-  "doneReason": "stop",
-  "totalDuration": 573092458,
-  "promptEvalCount": 1081,
-  "evalCount": 29,
-  "totalTokenCount": 1110,
-  "tools": [
-    {
-      "name": "get_movie_director",
-      "arguments": "{\"properties\":\"{'movieTitle': 'Inception'}\"}",
-      "result": "Christopher Nolan"
-    }
-  ]
-}
-```
-
-> **Important:** This particular response shows an invalid tool call generated by the small LLM.
-> Instead of sending `{"movieTitle":"Inception"}`, the model sent a copy of the tool's JSON
-> schema. Consequently, MCP input validation rejected the tool call. Although the model still
-> returned the correct director in its final response, that answer was not obtained from the
-> successful execution of `get_movie_director`.
 
 The complete execution flow is:
 
 ```text
 API request to LangChainMCPClient
-  -> LLM selects get_movie_director
+  -> LLM selects the required Git tools
   -> LangChain4j McpToolProvider sends tools/call to this server
-  -> MovieToolService executes
+  -> GitToolService executes read-only Git commands
   -> MCP result returns to the LLM
   -> LangChainMCPClient returns the final natural-language response
 ```
@@ -327,10 +298,9 @@ API request to LangChainMCPClient
 Add a public method to a class implementing `ToolService`:
 
 ```java
-@Tool("Find a movie's rating")
-public String getMovieRating(
-        @P("The title of the movie") final String movieTitle) {
-    return movieDao.findRating(movieTitle);
+@Tool("Get the current Git branch name")
+public String getCurrentBranch() {
+    return runGit("No current branch.", "branch", "--show-current");
 }
 ```
 
@@ -343,7 +313,7 @@ Multibinder.newSetBinder(binder(), ToolService.class)
 ```
 
 After restarting the server, `tools/list` will include the new tool. Java method names are converted
-to snake case, so `getMovieRating` becomes `get_movie_rating`.
+to snake case, so `getCurrentBranch` becomes `get_current_branch`.
 
 ## Important rules for tool methods
 
