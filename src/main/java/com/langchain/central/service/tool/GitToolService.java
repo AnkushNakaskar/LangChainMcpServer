@@ -1,6 +1,8 @@
 package com.langchain.central.service.tool;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.langchain.central.service.tool.git.GitWorkspace;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import java.io.ByteArrayOutputStream;
@@ -30,20 +32,38 @@ public class GitToolService implements ToolService {
     private static final Pattern SAFE_REVISION =
             Pattern.compile("[A-Za-z0-9][A-Za-z0-9._/@~^{}-]*");
 
+
+    private static final String REPOSITORY_DESCRIPTION =
+            "Repository to act on: a clone URL, the project URL copied from the browser, or the "
+                    + "path of a local clone";
+
     private final Path repositoryPath;
+    private final GitWorkspace workspace;
 
-    public GitToolService() {
-        this(resolveRepositoryPath());
+
+    @Inject
+    public GitToolService(final GitWorkspace workspace) {
+        this(workspace,resolveRepositoryPath());
     }
 
-    GitToolService(final Path repositoryPath) {
+
+    public GitToolService(final GitWorkspace workspace,final Path repositoryPath) {
         this.repositoryPath = repositoryPath.toAbsolutePath().normalize();
+        this.workspace = workspace;
     }
 
-    @Tool("Get the current Git branch and working tree status for code review")
-    public String getGitStatus() {
-        return runGit("Working tree is clean.", "status", "--short", "--branch");
+
+    @Tool("Get the current branch and working tree status of a repository")
+    public String getGitStatus(@P(REPOSITORY_DESCRIPTION) final String repository) {
+        Path localRepositoryPath =  workspace.checkout(repository,true);
+        return runGit(localRepositoryPath,"Working tree is clean.", "status", "--short", "--branch");
+
     }
+
+//    @Tool("Get the current Git branch and working tree status for code review")
+//    public String getGitStatus() {
+//        return runGit("Working tree is clean.", "status", "--short", "--branch");
+//    }
 
     @Tool("Get unstaged changes in the Git working tree as a patch")
     public String getWorkingTreeDiff() {
@@ -112,6 +132,52 @@ public class GitToolService implements ToolService {
                 requireRevision(revision),
                 "--");
     }
+
+
+
+    private String runGit(final Path localRepositoryPath, final String emptyResult, final String... arguments) {
+        log.info("Invoking git with custom path .......");
+        if (!Files.isDirectory(localRepositoryPath)) {
+            throw new IllegalStateException(
+                    "Git repository directory does not exist: " + localRepositoryPath);
+        }
+
+        final List<String> command = new ArrayList<>();
+        command.add("git");
+        command.add("--no-pager");
+        command.addAll(List.of(arguments));
+        log.info("Running Git tool command in {}: {}", localRepositoryPath, command);
+
+        final ProcessBuilder processBuilder = new ProcessBuilder(command)
+                .directory(localRepositoryPath.toFile())
+                .redirectErrorStream(true);
+        processBuilder.environment().put("GIT_TERMINAL_PROMPT", "0");
+
+        try {
+            final Process process = processBuilder.start();
+            final CompletableFuture<String> output =
+                    CompletableFuture.supplyAsync(() -> readOutput(process.getInputStream()));
+            if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                output.join();
+                throw new IllegalStateException(
+                        "Git command timed out after " + COMMAND_TIMEOUT_SECONDS + " seconds");
+            }
+
+            final String text = output.join().trim();
+            if (process.exitValue() != 0) {
+                throw new IllegalStateException(
+                        text.isEmpty() ? "Git command failed with no output" : text);
+            }
+            return text.isEmpty() ? emptyResult : text;
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to execute Git: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Git command was interrupted", e);
+        }
+    }
+
 
     private String runGit(final String emptyResult, final String... arguments) {
         if (!Files.isDirectory(repositoryPath)) {
