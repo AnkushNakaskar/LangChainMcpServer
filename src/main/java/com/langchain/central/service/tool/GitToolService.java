@@ -52,7 +52,9 @@ public class GitToolService implements ToolService {
         this.workspace = workspace;
     }
 
-
+    /*
+    Get the current branch and working tree status of a repository= https://github.com/AnkushNakaskar/LangChainDemo/tree/feature/git-assistance
+     */
     @Tool("Get the current branch and working tree status of a repository")
     public String getGitStatus(@P(REPOSITORY_DESCRIPTION) final String repository) {
         Path localRepositoryPath =  workspace.checkout(repository,true);
@@ -72,7 +74,6 @@ public class GitToolService implements ToolService {
     public String getRecentCommits(@P(REPOSITORY_DESCRIPTION) final String repository
             ) {
         Path localRepositoryPath =  workspace.checkout(repository,true);
-
         return runGit(localRepositoryPath,
                 "No commits found.",
                 "log",
@@ -92,15 +93,23 @@ public class GitToolService implements ToolService {
 //                "--pretty=format:%h%x09%ad%x09%an%x09%s");
 //    }
 
-    @Tool("Get unstaged changes in the Git working tree as a patch")
-    public String getWorkingTreeDiff() {
-        return runGit("No unstaged changes.", "diff", "--no-ext-diff", "--unified=3", "--");
+    /*
+    Get unstaged changes in the Git working tree as a patch for the repository=https://github.com/AnkushNakaskar/LangChainDemo/tree/feature/git-assistance
+     */
+    @Tool("Get unstaged changes in the Git working tree as a patch for the repository mentioned")
+    public String getWorkingTreeDiff(@P(REPOSITORY_DESCRIPTION) final String repository) {
+        Path localRepositoryPath =  workspace.checkout(repository,true);
+        return runGit(localRepositoryPath,"No unstaged changes.", "diff", "--no-ext-diff", "--unified=3", "--");
     }
 
 
-    @Tool("Get staged Git changes as a patch")
-    public String getStagedDiff() {
-        return runGit(
+    /*
+    Pls use the tool and invoke and Get staged Git changes as a patch for repository: https://github.com/AnkushNakaskar/LangChainDemo/tree/feature/git-assistance
+     */
+    @Tool("Get staged Git changes as a patch for repository mentioned")
+    public String getStagedDiff(@P(REPOSITORY_DESCRIPTION) final String repository) {
+        Path localRepositoryPath =  workspace.checkout(repository,true);
+        return runGit(localRepositoryPath,
                 "No staged changes.",
                 "diff",
                 "--cached",
