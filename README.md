@@ -90,6 +90,7 @@ names with `-parameters`, allowing MCP arguments such as `baseRevision` to map t
 
 | MCP tool | Java method | Arguments | Description |
 |---|---|---|---|
+| `review_merge_request` | `reviewMergeRequest` | `mergeRequest`, `context` | Fetches a merge request link, diffs it against its target branch, and returns the description and changed lines per file to review against the given context |
 | `get_git_status` | `getGitStatus` | None | Shows the branch and working tree status |
 | `get_working_tree_diff` | `getWorkingTreeDiff` | None | Returns unstaged changes |
 | `get_staged_diff` | `getStagedDiff` | None | Returns staged changes |
@@ -232,6 +233,25 @@ curl -X POST http://localhost:8088/mcp \
       "arguments": {
         "baseRevision": "main",
         "headRevision": "feature/code-review"
+      }
+    }
+  }'
+```
+
+Review a merge request from its link:
+
+```bash
+curl -X POST http://localhost:8088/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "tools/call",
+    "params": {
+      "name": "review_merge_request",
+      "arguments": {
+        "mergeRequest": "https://gitlab.example.com/group/project/-/merge_requests/727",
+        "context": "Review for clean code, design patterns, function names, field names and constants."
       }
     }
   }'
