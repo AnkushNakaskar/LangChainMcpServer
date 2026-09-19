@@ -65,10 +65,38 @@ public class GitToolService implements ToolService {
 //        return runGit("Working tree is clean.", "status", "--short", "--branch");
 //    }
 
+    /*
+    Get recent Git commits to understand  history of a repository= https://github.com/AnkushNakaskar/LangChainDemo/tree/feature/git-assistance
+     */
+    @Tool("Get recent Git commits to understand  history of a repository mentioned")
+    public String getRecentCommits(@P(REPOSITORY_DESCRIPTION) final String repository
+            ) {
+        Path localRepositoryPath =  workspace.checkout(repository,true);
+
+        return runGit(localRepositoryPath,
+                "No commits found.",
+                "log",
+                "--max-count=" + 5,
+                "--date=iso-strict",
+                "--pretty=format:%h%x09%ad%x09%an%x09%s");
+    }
+
+//    @Tool("Get recent Git commits to understand repository history")
+//    public String getRecentCommits(
+//            @P("Number of commits to return, from 1 to 100") final String maxCount) {
+//        return runGit(
+//                "No commits found.",
+//                "log",
+//                "--max-count=" + maxCount,
+//                "--date=iso-strict",
+//                "--pretty=format:%h%x09%ad%x09%an%x09%s");
+//    }
+
     @Tool("Get unstaged changes in the Git working tree as a patch")
     public String getWorkingTreeDiff() {
         return runGit("No unstaged changes.", "diff", "--no-ext-diff", "--unified=3", "--");
     }
+
 
     @Tool("Get staged Git changes as a patch")
     public String getStagedDiff() {
@@ -108,16 +136,7 @@ public class GitToolService implements ToolService {
                 "--");
     }
 
-    @Tool("Get recent Git commits to understand repository history")
-    public String getRecentCommits(
-            @P("Number of commits to return, from 1 to 100") final String maxCount) {
-        return runGit(
-                "No commits found.",
-                "log",
-                "--max-count=" + maxCount,
-                "--date=iso-strict",
-                "--pretty=format:%h%x09%ad%x09%an%x09%s");
-    }
+
 
     @Tool("Show a Git commit with its metadata, file statistics, and patch")
     public String showCommit(
