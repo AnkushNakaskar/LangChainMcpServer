@@ -3,10 +3,10 @@ server:
   adminMaxThreads: 64
   applicationConnectors:
     - type: http
-      port: 8088
+      port: 9088
   adminConnectors:
     - type: http
-      port: 8087
+      port: 9087
 defaultSize: 5
 mcp:
   enabled: true
