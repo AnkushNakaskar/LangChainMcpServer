@@ -181,8 +181,8 @@ public class GitToolService implements ToolService {
     }
 
     /*
-    Please review this MR : https://gitlab.phonepe.com/central-platforms/disputes/stratos/-/merge_requests/727 With context like : Pls review with clean code, design pattern, function names, fields name and constant.
-
+    1. Please review this MR : https://gitlab.phonepe.com/central-platforms/disputes/stratos/-/merge_requests/727 With context like : Pls review with clean code, design pattern, function names, fields name and constant.
+    2. Can you pls review the MR : https://gitlab.phonepe.com/central-platforms/disputes/stratos/-/merge_requests/715
      */
     @Tool("Review a merge request: fetch the merge request, compare it with its target branch, "
             + "and return its description and the changed lines of every file, to be reviewed "
@@ -212,10 +212,10 @@ public class GitToolService implements ToolService {
                 section("Review context", context),
                 section("Merge request description", describe(
                         localRepositoryPath, baseRevision, headRevision)),
-//                section("Changed files", runGit(
-//                        localRepositoryPath,
-//                        "No files changed.",
-//                        "diff", "--name-status", baseRevision, headRevision, "--")),
+                section("Changed files", runGit(
+                        localRepositoryPath,
+                        "No files changed.",
+                        "diff", "--name-status", baseRevision, headRevision, "--")),
 //                section("Changes per file and line", changesPerFile(
 //                        localRepositoryPath, baseRevision, headRevision)),
                 section("How to report", REVIEW_REPORT_INSTRUCTIONS));
