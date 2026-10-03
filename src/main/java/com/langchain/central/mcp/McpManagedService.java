@@ -13,14 +13,14 @@ public class McpManagedService implements Managed {
 
     private final McpConfig config;
     private final JerseyMcpTransport transport;
-    private final McpToolRegistrar toolRegistrar;
+    private final McpToolProcessor toolRegistrar;
     private McpStatelessSyncServer server;
 
     @Inject
     public McpManagedService(
             final McpConfig config,
             final JerseyMcpTransport transport,
-            final McpToolRegistrar toolRegistrar) {
+            final McpToolProcessor toolRegistrar) {
         this.config = config;
         this.transport = transport;
         this.toolRegistrar = toolRegistrar;
@@ -35,7 +35,7 @@ public class McpManagedService implements Managed {
                 .serverInfo(config.getName(), config.getVersion())
                 .instructions(config.getInstructions())
                 .capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
-                .tools(toolRegistrar.tools())
+                .tools(toolRegistrar.getAvailableTools())
                 .build();
     }
 

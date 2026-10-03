@@ -41,13 +41,13 @@ public class McpStreamingResponder {
     private static final String PROGRESS_TOKEN = "progressToken";
 
     private final JerseyMcpTransport transport;
-    private final ToolStreamRegistry registry;
+    private final ToolExecutionStreamRegistry registry;
     private final McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
     @Inject
     public McpStreamingResponder(
             final JerseyMcpTransport transport,
-            final ToolStreamRegistry registry) {
+            final ToolExecutionStreamRegistry registry) {
         this.transport = transport;
         this.registry = registry;
     }
@@ -91,7 +91,7 @@ public class McpStreamingResponder {
             }
             writeEvent(writer, output, response(request, result));
         } finally {
-            registry.remove(progressToken);
+            registry.removeToolExecutionStream(progressToken);
         }
     }
 

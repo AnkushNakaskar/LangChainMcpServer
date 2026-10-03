@@ -24,6 +24,26 @@ public class McpToolUtil {
         lenientArgumentMapper.enable(JsonParser.Feature.ALLOW_SINGLE_QUOTES);
     }
 
+    public Object convert(final Object value,
+                          final Class<?> targetType) {
+        if (value == null) {
+            if (targetType.isPrimitive()) {
+                throw new IllegalArgumentException(
+                        "A value is required for primitive type " + targetType.getSimpleName());
+            }
+            return null;
+        }
+        if (targetType.isInstance(value)) {
+            return value;
+        }
+        try {
+            return lenientArgumentMapper.convertValue(value, targetType);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "Cannot convert MCP argument value '" + value + "' to " + targetType.getSimpleName(), e);
+        }
+    }
+
 
     public String toJsonSchemaType(final Class<?> javaType) {
         if (javaType == String.class || javaType.isEnum()) {

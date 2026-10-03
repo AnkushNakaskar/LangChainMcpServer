@@ -82,7 +82,7 @@ GitToolService -> local Git repository
 
 `McpManagedService` starts and stops the MCP SDK with the Dropwizard lifecycle.
 
-`McpToolRegistrar` reads public methods annotated with `@Tool`, generates their JSON schemas, and
+`McpToolProcessor` reads public methods annotated with `@Tool`, generates their JSON schemas, and
 registers handlers that invoke the corresponding Java methods. Maven compilation retains parameter
 names with `-parameters`, allowing MCP arguments such as `baseRevision` to map to Java parameters.
 
