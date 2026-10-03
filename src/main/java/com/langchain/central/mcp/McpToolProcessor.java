@@ -9,7 +9,7 @@ import com.langchain.central.service.tool.ToolService;
 import com.langchain.central.util.McpToolUtil;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
-import io.modelcontextprotocol.server.McpStatelessServerFeatures.SyncToolSpecification;
+import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -21,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Singleton
 public class McpToolProcessor {
@@ -36,12 +38,12 @@ public class McpToolProcessor {
         this.toolExecutionStreamRegistry = toolExecutionStreamRegistry;
     }
 
-    public List<SyncToolSpecification> getAvailableTools() {
-        final List<SyncToolSpecification> tools = new ArrayList<>();
+    public List<AsyncToolSpecification> getAvailableTools() {
+        final List<AsyncToolSpecification> tools = new ArrayList<>();
         for (ToolService service : services) {
             for (Method method : service.getClass()
                     .getMethods()) {
-                SyncToolSpecification specification = toToolSpecification(service, method);
+                AsyncToolSpecification specification = toToolSpecification(service, method);
                 if (specification != null) {
                     tools.add(specification);
                 }
@@ -50,8 +52,8 @@ public class McpToolProcessor {
         return tools;
     }
 
-    private SyncToolSpecification toToolSpecification(final ToolService service,
-                                                      final Method method) {
+    private AsyncToolSpecification toToolSpecification(final ToolService service,
+                                                       final Method method) {
         if (method.isAnnotationPresent(Tool.class)) {
             final Tool annotation = method.getAnnotation(Tool.class);
             final String[] descriptions = annotation.value();
@@ -63,9 +65,15 @@ public class McpToolProcessor {
                     .inputSchema(prepareAndGetToolInputSchema(method))
                     .build();
 
-            return SyncToolSpecification.builder()
+            return AsyncToolSpecification.builder()
                     .tool(tool)
-                    .callHandler((context, request) -> invokeTool(service, method, request))
+                    // The tool bodies are blocking (git, HTTP, LLM calls), so each call is
+                    // subscribed on a worker thread and never occupies the thread that is driving
+                    // the request. The ThreadLocal stream is bound inside the callable, which is
+                    // the very thread the tool runs on.
+                    .callHandler((context, request) -> Mono
+                            .fromCallable(() -> invokeTool(service, method, request))
+                            .subscribeOn(Schedulers.boundedElastic()))
                     .build();
         }
         return null;
@@ -111,16 +119,18 @@ public class McpToolProcessor {
     }
 
     /**
-     * The stream the request is being answered on, or a sink that discards partial output.
+     * The stream the request is being answered on, or a sink that discards partial output. A call
+     * made without a progress token is not being streamed, so there is nothing to look up.
      */
     private ToolStream streamOf(final CallToolRequest request) {
         final Map<String, Object> meta = request.meta();
         final Object progressToken = meta == null
                                      ? null
                                      : meta.get(PROGRESS_TOKEN);
-        return toolExecutionStreamRegistry.getToolExecution(progressToken == null
-                                   ? null
-                                   : String.valueOf(progressToken))
+        if (progressToken == null) {
+            return ToolStream.NOOP;
+        }
+        return toolExecutionStreamRegistry.getToolExecution(String.valueOf(progressToken))
                 .orElse(ToolStream.NOOP);
     }
 

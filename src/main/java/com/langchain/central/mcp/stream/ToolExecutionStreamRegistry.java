@@ -25,6 +25,8 @@ public class ToolExecutionStreamRegistry {
     }
 
     public Optional<ToolStream> getToolExecution(final String toolExecutionToken) {
-        return Optional.ofNullable(toolExecutionStreams.getOrDefault(toolExecutionToken,null));
+        return toolExecutionToken == null
+               ? Optional.empty()
+               : Optional.ofNullable(toolExecutionStreams.get(toolExecutionToken));
     }
 }
