@@ -2,6 +2,9 @@ package com.langchain.central.mcp;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.langchain.central.mcp.stream.ToolStream;
+import com.langchain.central.mcp.stream.ToolStreamContext;
+import com.langchain.central.mcp.stream.ToolStreamRegistry;
 import com.langchain.central.service.tool.ToolService;
 import com.langchain.central.util.McpToolUtil;
 import dev.langchain4j.agent.tool.P;
@@ -22,15 +25,20 @@ import java.util.Set;
 @Singleton
 public class McpToolRegistrar {
 
+    private static final String PROGRESS_TOKEN = "progressToken";
+
     private final Set<ToolService> services;
     private final McpToolArgumentConverter argumentConverter;
+    private final ToolStreamRegistry streamRegistry;
 
     @Inject
     public McpToolRegistrar(
             final Set<ToolService> services,
-            final McpToolArgumentConverter argumentConverter) {
+            final McpToolArgumentConverter argumentConverter,
+            final ToolStreamRegistry streamRegistry) {
         this.services = services;
         this.argumentConverter = argumentConverter;
+        this.streamRegistry = streamRegistry;
     }
 
     public List<SyncToolSpecification> tools() {
@@ -87,10 +95,15 @@ public class McpToolRegistrar {
                 "required", required);
     }
 
+    /**
+     * Runs the tool with the stream of its request bound to this thread, so a slow tool can publish
+     * its result in parts while it works instead of only when it returns.
+     */
     private CallToolResult invoke(
             final ToolService service,
             final Method method,
             final CallToolRequest request) {
+        ToolStreamContext.bind(streamOf(request));
         try {
             final Map<String, Object> arguments =
                     request.arguments() == null ? Map.of() : request.arguments();
@@ -107,7 +120,17 @@ public class McpToolRegistrar {
             final Throwable cause = e instanceof InvocationTargetException
                     && e.getCause() != null ? e.getCause() : e;
             return result("Tool invocation failed: " + cause.getMessage(), true);
+        } finally {
+            ToolStreamContext.clear();
         }
+    }
+
+    /** The stream the request is being answered on, or a sink that discards partial output. */
+    private ToolStream streamOf(final CallToolRequest request) {
+        final Map<String, Object> meta = request.meta();
+        final Object progressToken = meta == null ? null : meta.get(PROGRESS_TOKEN);
+        return streamRegistry.find(progressToken == null ? null : String.valueOf(progressToken))
+                .orElse(ToolStream.NOOP);
     }
 
     private CallToolResult result(final String text, final boolean error) {

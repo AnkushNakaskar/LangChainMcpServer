@@ -2,6 +2,8 @@ package com.langchain.central.service.tool;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.langchain.central.mcp.stream.ToolStream;
+import com.langchain.central.mcp.stream.ToolStreamContext;
 import com.langchain.central.service.tool.git.GitCommandRunner;
 import com.langchain.central.service.tool.git.GitWorkspace;
 import com.langchain.central.service.tool.git.MergeRequestReference;
@@ -119,8 +121,10 @@ public class GitToolService implements ToolService {
      */
     @Tool("Get the current branch and working tree status of a repository")
     public String getGitStatus(@P(REPOSITORY_DESCRIPTION) final String repository) {
-        Path localRepositoryPath =  workspace.checkout(repository,true);
-        return runGit(localRepositoryPath,"Working tree is clean.", "status", "--short", "--branch");
+        Path localRepositoryPath = checkout(repository, true);
+        progress("Reading the working tree status");
+        return publishResult(runGit(
+                localRepositoryPath, "Working tree is clean.", "status", "--short", "--branch"));
 
     }
 
@@ -135,13 +139,14 @@ public class GitToolService implements ToolService {
     @Tool("Get recent Git commits to understand  history of a repository mentioned")
     public String getRecentCommits(@P(REPOSITORY_DESCRIPTION) final String repository
             ) {
-        Path localRepositoryPath =  workspace.checkout(repository,true);
-        return runGit(localRepositoryPath,
+        Path localRepositoryPath = checkout(repository, true);
+        progress("Reading the most recent commits");
+        return publishResult(runGit(localRepositoryPath,
                 "No commits found.",
                 "log",
                 "--max-count=" + 5,
                 "--date=iso-strict",
-                "--pretty=format:%h%x09%ad%x09%an%x09%s");
+                "--pretty=format:%h%x09%ad%x09%an%x09%s"));
     }
 
 //    @Tool("Get recent Git commits to understand repository history")
@@ -160,8 +165,10 @@ public class GitToolService implements ToolService {
      */
     @Tool("Get unstaged changes in the Git working tree as a patch for the repository mentioned")
     public String getWorkingTreeDiff(@P(REPOSITORY_DESCRIPTION) final String repository) {
-        Path localRepositoryPath =  workspace.checkout(repository,true);
-        return runGit(localRepositoryPath,"No unstaged changes.", "diff", "--no-ext-diff", "--unified=3", "--");
+        Path localRepositoryPath = checkout(repository, true);
+        progress("Reading the unstaged changes");
+        return publishResult(runGit(
+                localRepositoryPath, "No unstaged changes.", "diff", "--no-ext-diff", "--unified=3", "--"));
     }
 
 
@@ -170,14 +177,15 @@ public class GitToolService implements ToolService {
      */
     @Tool("Get staged Git changes as a patch for repository mentioned")
     public String getStagedDiff(@P(REPOSITORY_DESCRIPTION) final String repository) {
-        Path localRepositoryPath =  workspace.checkout(repository,true);
-        return runGit(localRepositoryPath,
+        Path localRepositoryPath = checkout(repository, true);
+        progress("Reading the staged changes");
+        return publishResult(runGit(localRepositoryPath,
                 "No staged changes.",
                 "diff",
                 "--cached",
                 "--no-ext-diff",
                 "--unified=3",
-                "--");
+                "--"));
     }
 
     /*
@@ -197,31 +205,73 @@ public class GitToolService implements ToolService {
         final long startedAt = System.currentTimeMillis();
         log.info("Reviewing merge request {} of {}", reference.getIid(), repository);
 
+        // Cloning, fetching and diffing a large merge request each take their own time, so every
+        // step publishes what it produced and a caller reading the stream never waits for the rest.
+        final ToolStream stream = ToolStreamContext.current();
+        final List<String> reviewSections = new ArrayList<>();
+
         // The merge request head and its target branch are fetched explicitly below, so a fetch of
         // every other branch here would only repeat that work against a large repository.
-        final Path localRepositoryPath = workspace.checkout(repository, false);
+        publish(stream, reviewSections,
+                "# Merge request " + reference.getIid() + " of " + repository);
+        final Path localRepositoryPath = checkout(repository, false);
+        progress("Fetching the head of merge request " + reference.getIid());
         final String headRevision = fetchMergeRequestHead(localRepositoryPath, reference.getIid());
+        progress("Resolving the target branch");
         final String targetRevision = resolveTargetBranch(localRepositoryPath);
         final String baseRevision = commandRunner.run(
                 localRepositoryPath, targetRevision, "merge-base", targetRevision, headRevision);
         log.info("Merge request {} is ready to review after {} ms",
                 reference.getIid(), System.currentTimeMillis() - startedAt);
 
-        //TODO : This need to be refactored correctly
-        String response =  String.join(NEW_LINE + NEW_LINE,
-                "# Merge request " + reference.getIid() + " of " + repository,
-                "Target branch: " + targetRevision + NEW_LINE + "Merge base: " + baseRevision,
-                section("Review context", context),
-                section("Merge request description", describe(
-                        localRepositoryPath, baseRevision, headRevision)),
-                section("Changed files", runGit(
-                        localRepositoryPath,
-                        "No files changed.",
-                        "diff", "--name-status", baseRevision, headRevision, "--")),
-                section("Changes per file and line", changesPerFile(
-                        localRepositoryPath, baseRevision, headRevision)),
-                section("How to report", REVIEW_REPORT_INSTRUCTIONS));
-        return response;
+        publish(stream, reviewSections,
+                "Target branch: " + targetRevision + NEW_LINE + "Merge base: " + baseRevision);
+        publish(stream, reviewSections, section("Review context", context));
+        publish(stream, reviewSections, section("Merge request description", describe(
+                localRepositoryPath, baseRevision, headRevision)));
+        publish(stream, reviewSections, section("Changed files", runGit(
+                localRepositoryPath,
+                "No files changed.",
+                "diff", "--name-status", baseRevision, headRevision, "--")));
+        // The changed lines are streamed one file at a time inside changesPerFile, so the section
+        // is only collected here and not published a second time.
+        reviewSections.add(section("Changes per file and line", changesPerFile(
+                localRepositoryPath, baseRevision, headRevision)));
+        publish(stream, reviewSections, section("How to report", REVIEW_REPORT_INSTRUCTIONS));
+
+        return String.join(NEW_LINE + NEW_LINE, reviewSections);
+    }
+
+    /**
+     * Sends a finished part of the review to whoever is reading the stream and keeps it for the
+     * complete result, so a streaming caller and a plain caller are given the same review.
+     */
+    private void publish(
+            final ToolStream stream, final List<String> sections, final String section) {
+        sections.add(section);
+        stream.partial(section);
+    }
+
+    /**
+     * Reports a step that is about to start. Cloning a repository or fetching a merge request can
+     * take minutes, during which this is the only sign the call is progressing rather than stuck.
+     */
+    private void progress(final String message) {
+        ToolStreamContext.current().partial(message);
+    }
+
+    /** Publishes a finished result and returns it, so streaming callers do not wait for the end. */
+    private String publishResult(final String result) {
+        ToolStreamContext.current().partial(result);
+        return result;
+    }
+
+    /** Checks the repository out, reporting the clone or update because it can be slow. */
+    private Path checkout(final String repository, final boolean fetchAllBranches) {
+        progress("Preparing a local clone of " + repository);
+        final Path localRepositoryPath = workspace.checkout(repository, fetchAllBranches);
+        progress("Local clone ready at " + localRepositoryPath);
+        return localRepositoryPath;
     }
 
     /**
@@ -231,6 +281,7 @@ public class GitToolService implements ToolService {
      */
     private String changesPerFile(
             final Path localRepositoryPath, final String baseRevision, final String headRevision) {
+        progress("Reading the changes of every file");
         final String patch = runGit(
                 localRepositoryPath,
                 "",
@@ -247,6 +298,9 @@ public class GitToolService implements ToolService {
             }
             if (included.length() + filePatch.length() <= MAX_REVIEW_CHARACTERS) {
                 included.append(filePatch);
+                // One event per file, so a reviewer can start on the first file of a large merge
+                // request instead of waiting for the whole patch to be assembled.
+                progress(filePatch);
             } else {
                 excludedFiles.add(fileNameOf(filePatch));
             }

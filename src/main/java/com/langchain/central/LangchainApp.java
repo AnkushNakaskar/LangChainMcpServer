@@ -15,6 +15,7 @@ import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.forms.MultiPartBundle;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
+import org.glassfish.jersey.server.ServerProperties;
 import ru.vyarus.dropwizard.guice.GuiceBundle;
 import ru.vyarus.dropwizard.guice.injector.lookup.InjectorLookup;
 
@@ -35,6 +36,9 @@ public class LangchainApp extends Application<BasicConfiguration> {
         McpToolUtil.init(environment.getObjectMapper());
         final var injector = InjectorLookup.getInjector(this)
                 .orElseThrow(() -> new IllegalStateException("Guice injector is not available"));
+        // Jersey buffers the start of a response to set Content-Length, which would hold back the
+        // progress events of a running tool call until it finished.
+        environment.jersey().property(ServerProperties.OUTBOUND_CONTENT_LENGTH_BUFFER, 0);
         environment.jersey().register(injector.getInstance(McpResource.class));
         environment.lifecycle().manage(injector.getInstance(McpManagedService.class));
 
