@@ -199,7 +199,7 @@ public class GitToolService implements ToolService {
             + "against the context supplied by the reviewer")
     public String reviewMergeRequest(
             @P(MERGE_REQUEST_DESCRIPTION) final String mergeRequest,
-            @P(REVIEW_CONTEXT_DESCRIPTION) final String context) {
+            @P(REVIEW_CONTEXT_DESCRIPTION) final String context) throws InterruptedException {
         final MergeRequestReference reference = MergeRequestReference.parse(mergeRequest);
         final String repository = reference.resolveRepository(null);
         final long startedAt = System.currentTimeMillis();
@@ -226,19 +226,27 @@ public class GitToolService implements ToolService {
 
         publish(stream, reviewSections,
                 "Target branch: " + targetRevision + NEW_LINE + "Merge base: " + baseRevision);
+        Thread.sleep(5000L);
+        log.info("Into the sleeping step1");
         publish(stream, reviewSections, section("Review context", context));
+        Thread.sleep(5000L);
+        log.info("Into the sleeping step2");
         publish(stream, reviewSections, section("Merge request description", describe(
                 localRepositoryPath, baseRevision, headRevision)));
+        log.info("Into the sleeping step3");
+        Thread.sleep(5000L);
         publish(stream, reviewSections, section("Changed files", runGit(
                 localRepositoryPath,
                 "No files changed.",
                 "diff", "--name-status", baseRevision, headRevision, "--")));
         // The changed lines are streamed one file at a time inside changesPerFile, so the section
         // is only collected here and not published a second time.
+        log.info("Into the sleeping step4");
+        Thread.sleep(5000L);
         reviewSections.add(section("Changes per file and line", changesPerFile(
                 localRepositoryPath, baseRevision, headRevision)));
         publish(stream, reviewSections, section("How to report", REVIEW_REPORT_INSTRUCTIONS));
-
+        log.info("Into the sleeping step5");
         return String.join(NEW_LINE + NEW_LINE, reviewSections);
     }
 
